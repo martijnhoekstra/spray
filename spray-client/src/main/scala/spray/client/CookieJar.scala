@@ -20,7 +20,6 @@ class CookieJar {
   var jar: CookieJar_ = CookieJar_("", Map.empty, Set.empty)
   def cookiesfor(domain: String) = jar.cookiesfor(domain)
   def setCookie(cookie: HttpCookie, domain: String) = {
-    println("setting cookie " + cookie)
     jar = jar.setCookie(cookie, domain)
   }
 
@@ -50,7 +49,6 @@ class CookieJar {
     }
 
     def setCookie(cookie: HttpCookie, domain: String) = {
-      println("setting cookie")
       val trimmed = if (domain.indexOf('.') == 0) domain.substring(1) else domain
       val domainelements = trimmed.split('.').toList.reverse
       _setCookie(domainelements, cookie)
