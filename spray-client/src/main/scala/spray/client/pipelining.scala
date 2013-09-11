@@ -44,23 +44,24 @@ object pipelining extends RequestBuilding with ResponseTransformation {
       case x                        ⇒ sys.error("Unexpected response from HTTP transport: " + x)
     }
 
-  def cookiedSendReceive(domain: String)(implicit cookiejar: CookieJar, refFactory: ActorRefFactory,
-                                         executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
+  def cookiedSendReceive(uri: Uri)(implicit cookiejar: CookieJar, refFactory: ActorRefFactory,
+                                   executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
     addCookies(cookiejar) ~>
       sendReceive ~>
-      storeCookies(cookiejar, domain)
+      storeCookies(cookiejar, uri)
   }
 
-  def cookiedSendReceive(transport: ActorRef, domain: String)(implicit ec: ExecutionContext, futureTimeout: Timeout, cookiejar: CookieJar): SendReceive = {
+  def cookiedSendReceive(transport: ActorRef, uri: Uri)(implicit ec: ExecutionContext, futureTimeout: Timeout, cookiejar: CookieJar): SendReceive = {
+
     addCookies(cookiejar) ~>
       sendReceive(transport) ~>
-      storeCookies(cookiejar, domain)
+      storeCookies(cookiejar, uri)
   }
 
   private def addCookies(cookiejar: CookieJar) = {
     req: HttpRequest ⇒
       {
-        val mycookies = cookiejar.cookiesfor(req.uri.authority.host.address).filter(c ⇒ req.uri.scheme == "https" || !c.secure)
+        val mycookies = cookiejar.cookiesfor(req.uri)
         if (mycookies.isEmpty) req
         else {
           val cookieheader = Cookie(mycookies.toList)
@@ -69,12 +70,12 @@ object pipelining extends RequestBuilding with ResponseTransformation {
       }
   }
 
-  private def storeCookies(cookiejar: CookieJar, domain: String) = {
+  private def storeCookies(cookiejar: CookieJar, uri: Uri) = {
     res: HttpResponse ⇒
       {
         val cookieHeaders = res.headers collect { case c: `Set-Cookie` ⇒ c }
         for (c ← cookieHeaders.map(ch ⇒ ch.cookie)) {
-          val cookiedomain = c.domain.getOrElse(domain)
+          val cookiedomain = c.domain.getOrElse(uri.authority.host.address)
           cookiejar.setCookie(c, cookiedomain)
         }
         res
