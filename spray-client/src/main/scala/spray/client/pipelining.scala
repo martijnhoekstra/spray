@@ -26,6 +26,8 @@ import spray.httpx.{ ResponseTransformation, RequestBuilding }
 import spray.can.Http
 import spray.util.actorSystem
 import spray.http._
+import spray.http.HttpHeaders.Cookie
+import spray.http.HttpHeaders.`Set-Cookie`
 
 object pipelining extends RequestBuilding with ResponseTransformation {
   type SendReceive = HttpRequest ⇒ Future[HttpResponse]
@@ -41,6 +43,33 @@ object pipelining extends RequestBuilding with ResponseTransformation {
       case x: Http.ConnectionClosed ⇒ sys.error("Connection closed before reception of response: " + x)
       case x                        ⇒ sys.error("Unexpected response from HTTP transport: " + x)
     }
+
+  def cookiedSendReceive(transport: ActorRef, domain: String)(implicit cookiejar: CookieJar, ec: ExecutionContext, futureTimeout: Timeout): SendReceive = {
+    addCookies(cookiejar) ~>
+      sendReceive(transport) ~>
+      storeCookies(cookiejar, domain)
+  }
+
+  private def addCookies(cookiejar: CookieJar) = {
+    def res(r: HttpRequest) = {
+      val mycookies = cookiejar.cookiesfor(r.uri.authority.host.address)
+      val cookieheader = Cookie(mycookies.toList)
+      addHeader(cookieheader)(r)
+    }
+    res _
+  }
+
+  private def storeCookies(cookiejar: CookieJar, domain: String) = {
+    def res(r: HttpResponse) = {
+      val cookieHeaders = r.headers collect { case c: `Set-Cookie` ⇒ c }
+      for (c ← cookieHeaders.map(ch ⇒ ch.cookie)) {
+        val cookiedomain = c.domain.getOrElse(domain)
+        cookiejar.setCookie(c, cookiedomain)
+      }
+      r
+    }
+    res _
+  }
 
   def sendTo(transport: ActorRef) = new SendTo(transport)
 
