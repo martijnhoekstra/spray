@@ -32,6 +32,7 @@ import spray.can.Http
 import spray.client.pipelining._
 import spray.http._
 import spray.util._
+import spray.http.HttpHeaders.`Set-Cookie`
 
 class HttpHostConnectorSpec extends Specification with NoTimeConversions {
   implicit val timeout: Timeout = 5.seconds
@@ -60,6 +61,11 @@ class HttpHostConnectorSpec extends Specification with NoTimeConversions {
           case x: HttpRequest if x.uri.toString.startsWith("/drop1of2") && dropNext ⇒
             log.debug("Dropping " + x)
             dropNext = random.nextBoolean()
+          case HttpRequest(_, Uri.Path("/setscookie"), _, _, _) ⇒
+            log.debug("Setting cookie")
+            val cookie = HttpCookie("cookiename", "cookievalue")
+            val cookieheader = `Set-Cookie`(cookie)
+            sender ! HttpResponse(entity = "content", headers = List(cookieheader))
           case x @ HttpRequest(method, uri, _, entity, _) ⇒
             log.debug("Responding to " + x)
             dropNext = random.nextBoolean()
@@ -113,6 +119,13 @@ class HttpHostConnectorSpec extends Specification with NoTimeConversions {
       val pipeline = sendReceive(connector)
       pipeline(HttpRequest()).await.header[HttpHeaders.`User-Agent`].get.value === "RequestMachine"
     }
+    "store the cookies the host sets" in {
+      val jar = new CookieJar
+      val pipeline = newPipeline(pipelined = false, cookiejar = jar)
+      val request = HttpRequest(uri = "/setscookie")
+      val response = pipeline(request).await
+      !jar.cookiesfor("").isEmpty
+    }
   }
 
   "Shutdown" should {
@@ -126,10 +139,11 @@ class HttpHostConnectorSpec extends Specification with NoTimeConversions {
 
   step(system.shutdown())
 
-  def newPipeline(pipelined: Boolean, maxConnections: Int = 4) = {
+  def newPipeline(pipelined: Boolean, maxConnections: Int = 4, cookiejar: CookieJar = new CookieJar) = {
+    implicit val cookiejar_ = cookiejar
     val settings = HostConnectorSettings(system).copy(maxConnections = maxConnections, pipelining = pipelined)
     val Http.HostConnectorInfo(connector, _) = IO(Http).ask(Http.HostConnectorSetup(interface, port, false, Nil, Some(settings))).await
-    sendReceive(connector)
+    cookiedSendReceive(connector, "")
   }
 
   def oneRequest(pipelined: Boolean) = {

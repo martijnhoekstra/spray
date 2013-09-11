@@ -44,31 +44,41 @@ object pipelining extends RequestBuilding with ResponseTransformation {
       case x                        ⇒ sys.error("Unexpected response from HTTP transport: " + x)
     }
 
-  def cookiedSendReceive(transport: ActorRef, domain: String)(implicit cookiejar: CookieJar, ec: ExecutionContext, futureTimeout: Timeout): SendReceive = {
+  def cookiedSendReceive(domain: String)(implicit cookiejar: CookieJar, refFactory: ActorRefFactory,
+                                         executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
+    addCookies(cookiejar) ~>
+      sendReceive ~>
+      storeCookies(cookiejar, domain)
+  }
+
+  def cookiedSendReceive(transport: ActorRef, domain: String)(implicit ec: ExecutionContext, futureTimeout: Timeout, cookiejar: CookieJar): SendReceive = {
     addCookies(cookiejar) ~>
       sendReceive(transport) ~>
       storeCookies(cookiejar, domain)
   }
 
   private def addCookies(cookiejar: CookieJar) = {
-    def res(r: HttpRequest) = {
-      val mycookies = cookiejar.cookiesfor(r.uri.authority.host.address)
-      val cookieheader = Cookie(mycookies.toList)
-      addHeader(cookieheader)(r)
-    }
-    res _
+    req: HttpRequest ⇒
+      {
+        val mycookies = cookiejar.cookiesfor(req.uri.authority.host.address).filter(c ⇒ req.uri.scheme == "https" || !c.secure)
+        if (mycookies.isEmpty) req
+        else {
+          val cookieheader = Cookie(mycookies.toList)
+          addHeader(cookieheader)(req)
+        }
+      }
   }
 
   private def storeCookies(cookiejar: CookieJar, domain: String) = {
-    def res(r: HttpResponse) = {
-      val cookieHeaders = r.headers collect { case c: `Set-Cookie` ⇒ c }
-      for (c ← cookieHeaders.map(ch ⇒ ch.cookie)) {
-        val cookiedomain = c.domain.getOrElse(domain)
-        cookiejar.setCookie(c, cookiedomain)
+    res: HttpResponse ⇒
+      {
+        val cookieHeaders = res.headers collect { case c: `Set-Cookie` ⇒ c }
+        for (c ← cookieHeaders.map(ch ⇒ ch.cookie)) {
+          val cookiedomain = c.domain.getOrElse(domain)
+          cookiejar.setCookie(c, cookiedomain)
+        }
+        res
       }
-      r
-    }
-    res _
   }
 
   def sendTo(transport: ActorRef) = new SendTo(transport)
