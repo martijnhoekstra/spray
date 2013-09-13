@@ -28,24 +28,28 @@ import spray.util.actorSystem
 import spray.http._
 import spray.http.HttpHeaders.Cookie
 import spray.http.HttpHeaders.`Set-Cookie`
+import scala.concurrent.Promise
+import akka.util.Timeout
+import scala.concurrent.duration._
+import scala.concurrent.Await
 
 object pipelining extends RequestBuilding with ResponseTransformation {
   type SendReceive = HttpRequest ⇒ Future[HttpResponse]
 
   def sendReceive(implicit refFactory: ActorRefFactory, executionContext: ExecutionContext,
-                  futureTimeout: Timeout = 60.seconds): SendReceive =
+    futureTimeout: Timeout = 60.seconds): SendReceive =
     sendReceive(IO(Http)(actorSystem))
 
   def sendReceive(transport: ActorRef)(implicit ec: ExecutionContext, futureTimeout: Timeout): SendReceive =
     request ⇒ transport ? request map {
-      case x: HttpResponse          ⇒ x
-      case x: HttpResponsePart      ⇒ sys.error("sendReceive doesn't support chunked responses, try sendTo instead")
+      case x: HttpResponse ⇒ x
+      case x: HttpResponsePart ⇒ sys.error("sendReceive doesn't support chunked responses, try sendTo instead")
       case x: Http.ConnectionClosed ⇒ sys.error("Connection closed before reception of response: " + x)
-      case x                        ⇒ sys.error("Unexpected response from HTTP transport: " + x)
+      case x ⇒ sys.error("Unexpected response from HTTP transport: " + x)
     }
 
   def cookiedSendReceive(uri: Uri)(implicit cookiejar: CookieJar, refFactory: ActorRefFactory,
-                                   executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
+    executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
     addCookies(cookiejar) ~>
       sendReceive ~>
       storeCookies(cookiejar, uri)
