@@ -7,10 +7,7 @@ import spray.http.DateTime
 import spray.http.HttpCookie
 
 /**
- * This is a *basic* CookieJar implementation. It will happily accept cookies with invalid characters
- * accept cookies without domain (which will happily be served to *any* site), accept cookies for
- * top level domains, and cookies for invalid domains. As such, it is not suitable for general use
- * where privacy matters are important, and not suitable for use where you may expect "bad" cookies.
+ * This is a basic CookieJar implementation. It doesn't handle IDN's properly, and I'm not sure on the correctness of the path handling
  *
  *  Emptor caveat.
  */
