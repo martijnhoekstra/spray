@@ -27,7 +27,7 @@ object EffectiveTldList {
   case class Node(map: Map[String, Trie]) extends Trie {
     def merge(that: Trie): Trie = {
       that match {
-        case Node(thatmap) ⇒ Node(mapmerge(map, thatmap, (_: Trie).merge(_: Trie))) //Node(mapmerge[String, Trie](map, thatmap, merge_))
+        case Node(thatmap) ⇒ Node(mapmerge(map, thatmap, (_: Trie).merge(_: Trie)))	
         case Leaf          ⇒ this
         case x: Wildcard   ⇒ throw new Exception(s"tries $x and $this not mergable")
       }
