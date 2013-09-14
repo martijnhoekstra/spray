@@ -3,17 +3,7 @@ package spray.client
 import scala.io.Source
 
 object EffectiveTldList {
-  val linest =
-    try {
-      //val linest = 
-      Source.fromFile("effectivetlds.lst", "UTF-8")
-    } catch {
-      case t: Throwable ⇒
-        println(t)
-        ""
-    }
-  //.getLines.filterNot(_.startsWith("//")).filterNot(_.isEmpty)
-  val lines = Source.fromString("").getLines
+  val lines = Source.fromFile("effectivetlds.lst", "UTF-8").getLines.filterNot(_.startsWith("//")).filterNot(_.isEmpty)
   val list = build(lines)
   def contains(domain: List[String]) = list.contains(domain)
   def contains(domain: String) = list.contains(domain.split('.').reverse.toList)
@@ -24,7 +14,7 @@ object EffectiveTldList {
         case Nil ⇒ true
         case head :: tail ⇒ this match {
           case Leaf                ⇒ false
-          case Wildcard(negations) ⇒ !negations.contains(head)
+          case Wildcard(negations) ⇒ tail == Nil && !negations.contains(head)
           case Node(m) ⇒ m.get(head) match {
             case None           ⇒ false
             case Some(trietail) ⇒ trietail.contains(tail)

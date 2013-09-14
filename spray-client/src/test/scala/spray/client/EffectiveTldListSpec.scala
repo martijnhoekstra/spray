@@ -47,7 +47,7 @@ class EffectiveTldListSpec extends Specification {
     }
     "allow subdomains under wildcards" in {
       for (dom ← disallowedByWildcard) {
-        list.contains("subdomain" + dom) must beEqualTo(false)
+        list.contains("subdomain." + dom) must beEqualTo(false)
       }
     }
     "allow subdomains of wildcards explicitly excempted" in {
