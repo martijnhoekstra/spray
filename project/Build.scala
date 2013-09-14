@@ -63,6 +63,7 @@ object Build extends Build with DocSupport {
       provided(akkaActor) ++
       test(akkaTestKit, specs2)
     )
+	.settings(unmanagedResourceDirectories in Compile <<= baseDirectory( bd => Seq(bd / "src/main/resources")))
 
 
   lazy val sprayHttp = Project("spray-http", file("spray-http"))

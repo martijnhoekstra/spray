@@ -37,19 +37,19 @@ object pipelining extends RequestBuilding with ResponseTransformation {
   type SendReceive = HttpRequest ⇒ Future[HttpResponse]
 
   def sendReceive(implicit refFactory: ActorRefFactory, executionContext: ExecutionContext,
-    futureTimeout: Timeout = 60.seconds): SendReceive =
+                  futureTimeout: Timeout = 60.seconds): SendReceive =
     sendReceive(IO(Http)(actorSystem))
 
   def sendReceive(transport: ActorRef)(implicit ec: ExecutionContext, futureTimeout: Timeout): SendReceive =
     request ⇒ transport ? request map {
-      case x: HttpResponse ⇒ x
-      case x: HttpResponsePart ⇒ sys.error("sendReceive doesn't support chunked responses, try sendTo instead")
+      case x: HttpResponse          ⇒ x
+      case x: HttpResponsePart      ⇒ sys.error("sendReceive doesn't support chunked responses, try sendTo instead")
       case x: Http.ConnectionClosed ⇒ sys.error("Connection closed before reception of response: " + x)
-      case x ⇒ sys.error("Unexpected response from HTTP transport: " + x)
+      case x                        ⇒ sys.error("Unexpected response from HTTP transport: " + x)
     }
 
   def cookiedSendReceive(uri: Uri)(implicit cookiejar: CookieJar, refFactory: ActorRefFactory,
-    executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
+                                   executionContext: ExecutionContext, futureTimeout: Timeout = 60.seconds): SendReceive = {
     addCookies(cookiejar) ~>
       sendReceive ~>
       storeCookies(cookiejar, uri)
@@ -79,8 +79,7 @@ object pipelining extends RequestBuilding with ResponseTransformation {
       {
         val cookieHeaders = res.headers collect { case c: `Set-Cookie` ⇒ c }
         for (c ← cookieHeaders.map(ch ⇒ ch.cookie)) {
-          val cookiedomain = c.domain.getOrElse(uri.authority.host.address)
-          cookiejar.setCookie(c, cookiedomain)
+          cookiejar.setCookie(c, uri)
         }
         res
       }

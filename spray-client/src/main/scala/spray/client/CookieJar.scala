@@ -16,13 +16,49 @@ import spray.http.HttpCookie
  */
 class CookieJar {
 
-  var jar: CookieJar_ = CookieJar_("", Map.empty, Map.empty)
-  def cookiesfor(uri: Uri) = jar.cookiesfor(uri)
-  def setCookie(cookie: HttpCookie, domain: String) = {
-    jar = jar.setCookie(cookie, domain)
+  case class StoredCookie(name: String, content: String, expires: Option[DateTime], domain: String, path: String, httpOnly: Boolean, secure: Boolean)
+
+  object StoredCookie {
+    implicit def toRegularCookie(src: StoredCookie) = {
+      HttpCookie(src.name, src.content, src.expires: Option[DateTime], None, Some(src.domain), Some(src.path), src.secure, src.httpOnly, None)
+    }
+    implicit def toStoredCookie(src: HttpCookie)(implicit uri: Uri) = {
+      val domain = src.domain.getOrElse(uri.authority.host.address)
+      val path = src.path.getOrElse(uri.path.toString)
+      val expiration = src.expires match {
+        case x: Some[DateTime] ⇒ x
+        case None              ⇒ src.maxAge.map(age ⇒ DateTime.now + age)
+      }
+      StoredCookie(src.name, src.content, expiration, domain, path, src.httpOnly, src.secure)
+    }
   }
 
-  case class CookieJar_(domainElement: String, subdomains: Map[String, CookieJar_], cookies: Map[String, HttpCookie]) {
+  var jar: CookieJar_ = CookieJar_("", Map.empty, Map.empty)
+
+  def cookiesfor(uri: Uri) = jar.cookiesfor(uri).map(c ⇒ StoredCookie.toRegularCookie(c))
+
+  def setCookie(cookie: HttpCookie, source: Uri) = {
+    val storedcookie = StoredCookie.toStoredCookie(cookie)(source)
+    if (isAllowedFor(storedcookie, source)) {
+      jar = jar.setCookie(storedcookie)
+      true
+    } else false
+  }
+
+  def isAllowedFor(cookie: StoredCookie, source: Uri): Boolean = {
+    !EffectiveTldList.contains(cookie.domain) &&
+      isDomainPostfix(cookie.domain, source.authority.host.address)
+    //status of cookie paths is not clear, not implemented
+  }
+
+  def isDomainPostfix(needle: String, haystack: String) = {
+    val needleelements = needle.split('.').toList.reverse
+    val haystackelements = haystack.split('.').toList.reverse
+    haystackelements.startsWith(needleelements)
+
+  }
+
+  case class CookieJar_(domainElement: String, subdomains: Map[String, CookieJar_], cookies: Map[String, StoredCookie]) {
     def cookiesfor(uri: Uri) = {
       val domain = uri.authority.host.address
       val domainelements = domain.split('.').toList.reverse
@@ -30,14 +66,11 @@ class CookieJar {
     }
 
     @tailrec
-    private def _getCookies(domain: List[String], uri: Uri, accum: Map[String, HttpCookie]): Map[String, HttpCookie] = {
+    private def _getCookies(domain: List[String], uri: Uri, accum: Map[String, StoredCookie]): Map[String, StoredCookie] = {
       val now = DateTime.now
       val newcookies = removeStale(cookies, now)
         .filter(c ⇒ uri.scheme == "https" || !c._2.secure)
-        .filter(c ⇒ c._2.path match {
-          case Some(path) ⇒ uri.path.startsWith(Uri.Path(path))
-          case None       ⇒ true
-        })
+        .filter(c ⇒ uri.path.startsWith(Uri.Path(c._2.path)))
       val totalCookies = accum ++ newcookies
       domain match {
         case Nil ⇒ totalCookies
@@ -50,13 +83,13 @@ class CookieJar {
       }
     }
 
-    def setCookie(cookie: HttpCookie, domain: String) = {
-      val trimmed = if (domain.indexOf('.') == 0) domain.substring(1) else domain
+    def setCookie(cookie: StoredCookie) = {
+      val trimmed = if (cookie.domain.indexOf('.') == 0) cookie.domain.substring(1) else cookie.domain
       val domainelements = trimmed.split('.').toList.reverse
       _setCookie(domainelements, cookie)
     }
 
-    private def _setCookie(domain: List[String], cookie: HttpCookie): CookieJar_ = {
+    private def _setCookie(domain: List[String], cookie: StoredCookie): CookieJar_ = {
       val now = DateTime.now
       domain match {
         case Nil ⇒ {
@@ -71,7 +104,7 @@ class CookieJar {
       }
     }
 
-    def removeStale(cookies: Map[String, HttpCookie], cutoff: DateTime) = {
+    def removeStale(cookies: Map[String, StoredCookie], cutoff: DateTime) = {
       cookies.filter(c ⇒ {
         c._2.expires match {
           case None                                ⇒ true
@@ -80,6 +113,6 @@ class CookieJar {
         }
       })
     }
-    
+
   }
 }
