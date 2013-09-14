@@ -8,7 +8,7 @@ class EffectiveTldListSpec extends Specification {
 
   val toplevels = List("ac", "ae", "aero")
   val allowedToplevels = List("henk", "paul", "johan")
-  val nonlatintoplevels = List("বাংলা", "中国", "لجزائر")
+  val nonlatintoplevels = List("বাংলা", "中国")
   val allowedSecondLevel = List("om.ws", "ccom.ws", "johan.aero")
   val disallowedSecondLevel = List("com.ws", "int.vn", "info.ve")
   val disallowedByWildcard = List("something.ye", "something.za", "something.zm")
